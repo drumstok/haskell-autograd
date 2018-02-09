@@ -1,5 +1,7 @@
+{-# LANGUAGE Rank2Types #-}
 import Data.Monoid ((<>))
 import Sum (Sum(..))
+import Control.Lens
 
 newtype Node g v = Node { fromNode :: (Node g v -> Node g g, v) }
 
@@ -14,6 +16,10 @@ value = snd . fromNode
 
 grad :: (Monoid g, Num v) => Node g v -> Node g g
 grad n = (fst $ fromNode n) (constant 1)
+
+getVar :: Monoid s => Lens' s a -> Node s s -> Node s a
+getVar ln (Node (g, s)) = Node (g . g', view ln s) where
+    g' (Node (gg, gv)) = Node (gg . getVar ln, set ln gv mempty)
 
 instance (Monoid g, Monoid v) => Monoid (Node g v) where
     mempty = Node (const mempty, mempty)
@@ -53,23 +59,16 @@ instance (Monoid g, Floating v) => Floating (Node g v) where
     acosh n@(Node (g, v)) = Node (g . (* (n*n-1)**(-0.5))   , acosh v)
     atanh n@(Node (g, v)) = Node (g . (* recip (1-n*n))     , atanh v)
 
--- Split a variable of a tuple into a tuple of two variables
-split :: (Monoid v, Monoid v') => Node (v, v') (v, v') -> (Node (v, v') v, Node (v, v') v')
-split (Node (g, (v1, v2))) = (Node (g . g1', v1), Node (g. g2', v2)) where
-    g1' :: (Monoid v, Monoid v') => Node (v, v') v -> Node (v, v') (v, v')
-    g1' (Node (gg, v)) = Node (gg . fst . split, (v, mempty))
-    g2' :: (Monoid v, Monoid v') => Node (v, v') v' -> Node (v, v') (v, v')
-    g2' (Node (gg, v')) = Node (gg . snd . split, (mempty, v'))
-
 main :: IO ()
 main = do
-    let (x, y) = split $ variable (2 :: Sum Double, 5 :: Sum Double)
+    let params = variable (2 :: Sum Double, 5 :: Sum Double)
+    let x = getVar _1 params
+    let y = getVar _2 params
     let res = x**3 + 2*y**3
-    print $ value res
-    print $ value $ grad res -- (dx, dy) = (12, 150)
-
-    let fstgrad = fst . split . grad
-    let sndgrad = snd . split . grad
+    let fstgrad = getVar _1 . grad
+    let sndgrad = getVar _2 . grad
+    print $ value res                               -- 258
+    print $ value $ grad res                        -- (dx, dy) = (12, 150)
     print $ value $ fstgrad $ fstgrad res           -- ddx  = 12
     print $ value $ fstgrad $ fstgrad $ fstgrad res -- dddx = 6
     print $ value $ sndgrad $ sndgrad res           -- ddy  = 60
