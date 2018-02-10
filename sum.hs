@@ -1,32 +1,12 @@
--- Wrapping Sum to add some instances
+-- A Sum Monoid that also derivings Fractional and Floating
 
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveFunctor #-}
 
 module Sum (Sum(..)) where
 
-import qualified Data.Monoid as M (Sum(..))
+newtype Sum a = Sum { getSum :: a }
+    deriving (Show, Eq, Functor, Num, Fractional, Floating)
 
-newtype Sum a = Sum { getSum :: M.Sum a }
-    deriving (Eq, Num, Functor, Monoid)
-
-instance Show a => Show (Sum a) where
-    show = show . M.getSum . getSum
-
-instance Fractional a => Fractional (Sum a) where
-    fromRational = Sum . M.Sum . fromRational
-    recip = fmap recip
-
-instance Floating a => Floating (Sum a) where
-    pi = Sum $ M.Sum pi
-    exp = fmap exp
-    log = fmap log
-    sin = fmap sin
-    cos = fmap cos
-    asin = fmap asin
-    acos = fmap acos
-    atan = fmap atan
-    sinh = fmap sinh
-    cosh = fmap cosh
-    asinh = fmap asinh
-    acosh = fmap acosh
-    atanh = fmap atanh
+instance Num a => Monoid (Sum a) where
+    mempty = Sum 0
+    Sum a `mappend` Sum b = Sum $ a + b

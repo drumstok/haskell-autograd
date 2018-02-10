@@ -5,6 +5,11 @@ import Control.Lens (Lens', view, set, _1, _2)
 
 data Node g v = Node { gradFn :: Node g v -> Node g g, value :: v }
 
+nodeOp :: (a -> b) -> (Node g b -> Node g a) -> Node g a -> Node g b
+nodeOp fw bw (Node g v) = Node (g . bw) (fw v)
+numOp :: (Monoid g, Num a) => (a -> a) -> (Node g a -> Node g a) -> Node g a -> Node g a
+numOp fw bw n = nodeOp fw (* bw n) n
+
 constNode :: Monoid g => v -> Node g v
 constNode = Node mempty
 
@@ -39,28 +44,28 @@ instance (Monoid g, Num v) => Num (Node g v) where
     n1@(Node g1 v1) * n2@(Node g2 v2) = Node g' (v1 * v2)
         where g' x = g1 (n2 * x) <> g2 (n1 * x)
 
-    abs n@(Node g v) = Node (g . (* signum n)) (abs v)
-    signum (Node _ v) = constNode $ signum v
+    abs = numOp abs signum
+    signum = numOp signum (const 0)
 
 instance (Monoid g, Fractional v) => Fractional (Node g v) where
     fromRational = constNode . fromRational
-    recip n@(Node g v) = Node (g . (* (-recip (n * n)))) (recip v)
+    recip = numOp recip (\x -> -recip (x*x))
 
 instance (Monoid g, Floating v) => Floating (Node g v) where
     pi = constNode pi
 
-    exp   n@(Node g v) = Node (g . (* exp n))              (exp v)
-    log   n@(Node g v) = Node (g . (* recip n))            (log v)
-    sin   n@(Node g v) = Node (g . (* cos n))              (sin v)
-    cos   n@(Node g v) = Node (g . (* (-sin n)))           (cos v)
-    asin  n@(Node g v) = Node (g . (* (1-n*n)**(-0.5)))    (asin v)
-    acos  n@(Node g v) = Node (g . (* (-(1-n*n)**(-0.5)))) (acos v)
-    atan  n@(Node g v) = Node (g . (* recip (1+n*n)))      (atan v)
-    sinh  n@(Node g v) = Node (g . (* cosh n))             (sinh v)
-    cosh  n@(Node g v) = Node (g . (* sinh n))             (cosh v)
-    asinh n@(Node g v) = Node (g . (* (1+n*n)**(-0.5)))    (asinh v)
-    acosh n@(Node g v) = Node (g . (* (n*n-1)**(-0.5)))    (acosh v)
-    atanh n@(Node g v) = Node (g . (* recip (1-n*n)))      (atanh v)
+    exp = numOp exp exp
+    log = numOp log recip
+    sin = numOp sin cos
+    cos = numOp cos (negate . sin)
+    asin = numOp asin (\x -> (1-x*x)**(-0.5))
+    acos = numOp acos (\x -> -(1-x*x)**(-0.5))
+    atan = numOp atan (\x -> recip (1+x*x))
+    sinh = numOp sinh cosh
+    cosh = numOp cosh sinh
+    asinh = numOp asinh (\x -> (1+x*x)**(-0.5))
+    acosh = numOp acosh (\x -> (x*x-1)**(-0.5))
+    atanh = numOp atanh (\x -> recip (1-x*x))
 
 main :: IO ()
 main = do
